@@ -6,17 +6,23 @@ import qualified Data.Text as T
 main :: IO ()
 main = do
     contents <- readFile "input"
+    let value = parseMulAndSumProducts contents
+    putStrLn $ "Sum of products: " <> show value
+
+parseMulAndSumProducts :: String -> Int
+parseMulAndSumProducts contents =
     let re = "mul\\(([0-9]+),([0-9]+)\\)"
-    let matches = getAllTextMatches (contents =~ re) :: [String]
-    let numPairs = fmap parseMul matches
-    let values = fmap kaboom numPairs
-    --putStrLn $ show values
-    putStrLn $ show (fmap sum $ sequence values)
+        matches = getAllTextMatches (contents =~ re) :: [String]
+        numPairs = fmap parseMul matches
+        values = fmap (fmap kaboom) numPairs
+        answer = sum <$> sequence values
+    in
+        case answer of
+            Just v -> v
+            Nothing -> error "No valid multyply entries"
     where
-        -- I shouldn't have to operate on Maybe's here...
-        kaboom :: Maybe (Int, Int) -> Maybe Int
-        kaboom (Just (a,b)) = Just (a * b)
-        kaboom Nothing = Nothing
+        kaboom :: (Int,Int) -> Int
+        kaboom (a,b) = a * b
 
 parseMul :: String -> Maybe (Int,Int)
 parseMul x = do
