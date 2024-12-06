@@ -13,10 +13,8 @@ common warnings
 executable day3
     import:           warnings
     main-is:          Main.hs
-    build-depends:    base ^>=4.19.1.0,
-                      regex-base,
-                      regex-compat,
-                      regex-posix,
-                      warp
+    build-depends:    base,
+                      regex-tdfa,
+                      text
     hs-source-dirs:   app
     default-language: Haskell2010
