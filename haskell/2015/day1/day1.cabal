@@ -1,0 +1,28 @@
+cabal-version:      3.0
+
+name:               day1
+version:            0.1.0.0
+-- synopsis:
+-- description:
+license:            MIT
+license-file:       LICENSE
+author:             xedrac
+-- maintainer:         shawnbadger@gmail.com
+-- copyright:
+build-type:         Simple
+-- Extra doc files to be distributed with the package, such as a CHANGELOG or a README.
+-- extra-doc-files:    CHANGELOG.md
+-- Extra source files to be distributed with the package, such as examples, or a tutorial module.
+-- extra-source-files:
+
+common warnings
+    ghc-options: -Wall
+
+executable day1
+    import:           warnings
+    main-is:          Main.hs
+    -- other-modules:    filepath
+    -- other-extensions:
+    build-depends:    base ^>=4.19.1.0
+    hs-source-dirs:   app
+    default-language: Haskell2010
