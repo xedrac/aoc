@@ -4,6 +4,12 @@ import Data.List
 
 main :: IO ()
 main = do
+    mainPart1
+    mainPart2
+
+
+mainPart1 :: IO ()
+mainPart1 = do
     --let rows = ["0123",
     --            "4567",
     --            "89AB",
@@ -35,7 +41,7 @@ main = do
     mapM_ print (fmap reverse diags)
 
     let numhits = sum (fmap (countSubstring "XMAS") zxx)
-    putStrLn $ "XMAS count: " ++ show numhits
+    putStrLn $ "Part1: " ++ show numhits
 
 
 -- Returns True if s0 is found anywhere in s1
@@ -98,15 +104,39 @@ topLeftTriangle = go []
                     go (row ++ acc) rest
 
 
---diagonalRight :: [[a]] -> [[a]]
---diagonalRight xxs =
---    [ [ xx !! (i + j) | i <- [0..min (length xx - 1) (length (head xxs) - 1 - j)] ]
---    | j <- [0..(length (head xxs) - 1)], xx <- xxs ]
---
---
---diagonalLeft :: [[a]] -> [[a]]
---diagonalLeft xxs =
---    [ [ xx !! (i + j) | i <- [0..min (length xx - 1) (length (head xxs) - 1 - j)] ]
---    | j <- [0..(length (head xxs) - 1)], xx <- reverse xxs ]
+mainPart2 :: IO ()
+mainPart2 = do
+    --let input = ["012345", "67890A", "BCDEFG", "HIJKLM", "NOPQRS", "TUVWXY"]
+    input <- lines <$> readFile "input"
+    let cubes = partition3x3Cubes input
+    --print cubes
+
+    --let xpats = fmap getXPattern cubes
+    --print xpats
+
+    --let hits = fmap isHit cubes
+    --print hits
+
+    let count = length $ filter id (fmap isHit cubes)
+    putStrLn $ "Part2: " ++ show count
+
+-- List comprehensions to the rescue.  I don't normally like using these because they can be
+-- hard to read, but I couldn't think of another way to do this without it getting messy quickly.
+partition3x3Cubes :: [[a]] -> [[a]]
+partition3x3Cubes xxs = fmap concat [ [ take 3 (drop k rows) | rows <- take 3 (drop j xxs) ]
+                                    | j <- [0..(length xxs - 3)], k <- [0..(length (head xxs) - 3)]]
+
+isHit :: String -> Bool
+isHit x = getXPattern x `elem` ["MMASS", "MSAMS", "SSAMM", "SMASM"]
+
+-- Input is a flattenet 3x3 cube
+--    123
+--    456   =>   123456789
+--    789
+-- Since we only care about the X shape in the 3x3 cube, we only care about
+-- the 1_3_5_7_9 positions.  So this function reduces it to 13579, which we can
+-- easily compare against the known set of possibilities
+getXPattern :: String -> String
+getXPattern xs = [xs !! k | k <- [0,2 .. 8]]
 
 
