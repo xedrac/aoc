@@ -1,0 +1,7 @@
+packages: .
+optimization: 2
+package *
+  optimization: 2
+
+program-options
+    ghc-options: -Wall -O2 -threaded -rtsopts -with-rtsopts=-N
