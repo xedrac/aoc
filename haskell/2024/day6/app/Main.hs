@@ -2,7 +2,6 @@
 
 module Main where
 
---import Control.Parallel.Strategies (parMap, rpar)
 import Control.Concurrent.Async (mapConcurrently)
 import Data.List
 import qualified Data.Map as M
@@ -13,7 +12,7 @@ data Grid = Grid
     , gridHeight :: Int
     , gridInitial :: Pos
     , gridCurrent :: Pos
-    , gridVisited :: M.Map Pos Char
+    , gridVisited :: M.Map (Int,Int) (Char, Dir)
     }
     deriving (Show, Eq)
 
@@ -35,9 +34,6 @@ main = do
     let gridCurrent = gridInitial
     let gridVisited = M.empty
 
-    --print contents
-    --putStrLn $ show gridWidth <> " x " <> show gridHeight
-    --print pos
     let grid = Grid {..}
     printGrid grid
     runPart1 grid
@@ -46,56 +42,66 @@ main = do
 
 runPart1 :: Grid -> IO ()
 runPart1 grid = do
-    let (g, completed) = walkGrid grid
+    (g@Grid{..}, completed) <- walkGrid grid
     let visitCount = countVisited g
     if completed then do
-        putStrLn ""
-        printGrid g
         putStrLn ""
         putStrLn $ "Visted: " <> show visitCount <> " tiles"
         putStrLn ""
     else
         putStrLn "Failed to complete, due to a seemingly infinite loop"
 
+    putStrLn ""
+    printGrid (stampedGrid g gridVisited)
 
---parallelTraverse :: NFData a => (a -> b) -> [a] -> [b]
---parallelTraverse = runEval $ parTraversable rpar
---parallelTraverse f xs = parEval $ parTraversable rpar (f) xs
 
 runPart2 :: Grid -> IO ()
 runPart2 grid = do
     -- Get the visited tiles for the vanilla grid, to seed possible roadblocks
-    let (Grid{..}, _) = walkGrid grid
-    let roadBlocks = M.keys (M.delete gridInitial gridVisited)
+    (Grid{..}, _) <- walkGrid grid
+    let (Pos initialRow initialCol _) = gridInitial
+    let roadBlocks = M.keys (M.delete (initialRow, initialCol) gridVisited)
     let grids = fmap (addRoadBlock grid) roadBlocks
-    putStrLn $ "Number of roadblack candidates: " <> show (length grids)
+    putStrLn $ "Number of roadblock candidates: " <> show (length grids)
     --completed <- traverse (uncurry walkAndReport) (zip [0..] grids)
-    --completed <- sequence $ parMap rpar (uncurry walkAndReport) (zip [0..] grids)
-    completed <- mapConcurrently (uncurry walkAndReport) (zip [0..] grids)
+    completed <- mapConcurrently (uncurry walkAndReport) (zip roadBlocks grids)
     putStrLn $ "Detected loops: " <> show (length (filter not completed))
 
     where
-        walkAndReport :: Int -> Grid -> IO Bool
-        walkAndReport idx g = do
-            let (_, completed) = walkGrid g
-            putStrLn $ show idx <> if completed then " completed" else " LOOP DETECTED"
+        walkAndReport :: (Int,Int) -> Grid -> IO Bool
+        walkAndReport blkCoords g = do
+            (_, completed) <- walkGrid g
+            putStrLn $ show blkCoords <> if completed then " completed" else " LOOP DETECTED"
             pure completed
 
 
-walkGrid :: Grid -> (Grid, Bool)
+walkGrid :: Grid -> IO (Grid, Bool)
 walkGrid grid = go grid 0
     where
-        go :: Grid -> Int -> (Grid, Bool)
+        go :: Grid -> Int -> IO (Grid, Bool)
         go g@Grid{..} revisitStreak =
             if revisitStreak > 100 then
-                (g, False)
+                pure (g, False)
             else do
-                case nextPos g of
-                    Nothing -> (g, True)
+                let next = nextPos g
+                --putStrLn $ "Next Pos: " <> show next
+                case next of
+                    Nothing -> do
+                        let c = markChar gridCurrent gridCurrent
+                        let visited = insertVisit gridCurrent c gridVisited
+                        let g' = Grid gridData gridWidth gridHeight gridInitial gridCurrent visited
+                        pure (g', True)
                     Just p -> do
-                        let revisit = M.member p gridVisited
+                        let revisit = isRevisit p gridVisited
                         let g' = moveToPos g p
                         go g' (if revisit then revisitStreak + 1 else 0)
+
+
+insertVisit :: Pos -> Char -> M.Map (Int,Int) (Char, Dir) -> M.Map (Int,Int) (Char, Dir)
+insertVisit (Pos row col dir) c = M.insert (row,col) (c,dir)
+
+isRevisit :: Pos -> M.Map (Int,Int) (Char,Dir) -> Bool
+isRevisit (Pos row col _) = M.member (row,col)
 
 
 countVisited :: Grid -> Int
@@ -117,7 +123,7 @@ findInitialPosition g width = do
          '<' -> Just (pos LEFT)
          _ -> Nothing
     where
-        isDirChar c = c `elem` ['^', 'v', '>', '<', '/']
+        isDirChar c = c `elem` ['^', 'v', '>', '<']
 
 index :: Grid -> Pos -> Int
 index Grid{..} (Pos row col _) = row * gridWidth + col
@@ -143,64 +149,31 @@ isOnGrid Grid{..} (Pos row col _) = row >= 0 && row < gridHeight && col >= 0 && 
 
 nextPos :: Grid -> Maybe Pos
 nextPos grid@Grid{..} = do
-    let (Pos row col dir) = gridCurrent
-    let p1 = case dir of
-                UP -> Pos (row-1) col dir
-                DOWN -> Pos (row+1) col dir
-                LEFT -> Pos row (col-1) dir
-                RIGHT -> Pos row (col+1) dir
-    if not (isOnGrid grid p1) then
-        Nothing
-    else if isBlocked grid p1 then do
-        -- If blocked, turn right and take the next block there
-        let p2 = case dir of
-                     UP -> Pos row (col+1) RIGHT
-                     DOWN -> Pos row (col-1) LEFT
-                     LEFT -> Pos (row+1) col UP
-                     RIGHT -> Pos (row-1) col DOWN
-        if not (isOnGrid grid p2) then
-            Nothing
-        else   -- TODO:  Don't assume you can't have two roadblocks in a row
-            Just p2
-    else
-        Just p1
-
-
--- Take a step and update the grid accordingly.
-stepOnce :: Grid -> Maybe Grid
-stepOnce grid = do
-    let mp = nextPos grid
-    case mp of
-        Nothing -> Nothing
-        Just p -> Just $ moveToPos grid p
-
-    --let (Pos row col dir) = gridCurrent
-    --let p1 = case dir of
-    --            UP -> Pos (row-1) col dir
-    --            DOWN -> Pos (row+1) col dir
-    --            LEFT -> Pos row (col-1) dir
-    --            RIGHT -> Pos row (col+1) dir
-    --if not (isOnGrid grid p1) then
-    --    Nothing
-    --else if isBlocked grid p1 then do
-    --    -- If blocked, turn right and take the next block there
-    --    let p2 = case dir of
-    --                 UP -> Pos row (col+1) RIGHT
-    --                 DOWN -> Pos row (col-1) LEFT
-    --                 LEFT -> Pos (row+1) col UP
-    --                 RIGHT -> Pos (row-1) col DOWN
-    --    if not (isOnGrid grid p2) then
-    --        Nothing
-    --    else
-    --        Just $ moveToPos p2
-    --else
-    --    Just $ moveToPos p1
-
+    let p@(Pos _ _ dir) = gridCurrent
+    go dir p 0
+    where
+        go :: Dir -> Pos -> Int -> Maybe Pos
+        go faceDir currPos@(Pos r c _) attempts =
+            if attempts > 3 then
+                Nothing   -- Walled in by roadblocks on all 4 sides?
+            else
+                let (p@(Pos r1 c1 _), nextDir) = case faceDir of
+                                       UP -> (Pos (r-1) c faceDir, RIGHT)
+                                       DOWN -> (Pos (r+1) c faceDir, LEFT)
+                                       LEFT -> (Pos r (c-1) faceDir, UP)
+                                       RIGHT -> (Pos r (c+1) faceDir, DOWN)
+                in
+                    if not (isOnGrid grid p) then
+                        Nothing
+                    else if isBlocked grid p then do
+                        go nextDir currPos (attempts+1)
+                    else
+                        Just $ Pos r1 c1 faceDir
 
 moveToPos :: Grid -> Pos -> Grid
 moveToPos Grid{..} pos = do
-    let c = markChar gridCurrent pos
-    let visited = M.insert pos c gridVisited
+    let c = if gridCurrent == gridInitial then initialPosToChar gridInitial else markChar gridCurrent pos
+    let visited = insertVisit gridCurrent c gridVisited
     Grid gridData gridWidth gridHeight gridInitial pos visited
 
 -- Given two positions, determine which character
@@ -218,10 +191,18 @@ markChar (Pos _ _ dir0) (Pos _ _ dir1) =
         (LEFT, UP) -> '+'
         _ -> '?'
 
--- Modify the actual Grid, used to set new roadblocks
-addRoadBlock :: Grid -> Pos -> Grid
-addRoadBlock grid@Grid{..} pos =
-    let offset = index grid pos
+initialPosToChar :: Pos -> Char
+initialPosToChar (Pos _ _ dir) =
+    case dir of
+        UP -> '^'
+        DOWN -> 'v'
+        LEFT -> '<'
+        RIGHT -> '>'
+
+-- Modify the actual grid data. Used to set new roadblocks
+addRoadBlock :: Grid -> (Int,Int) -> Grid
+addRoadBlock grid@Grid{..} (row,col) =
+    let offset = index grid (Pos row col UP)
         grid' = take offset gridData ++ ['O'] ++ drop (offset+1) gridData
     in
         Grid grid' gridWidth gridHeight gridInitial gridCurrent gridVisited
@@ -234,4 +215,17 @@ printGrid Grid{..} = do
     where
         printRow :: Int -> IO ()
         printRow rowidx = print $ take gridWidth (drop (rowidx * gridWidth) gridData)
+
+stampedGrid :: Grid -> M.Map (Int,Int) (Char,Dir) -> Grid
+stampedGrid = M.foldrWithKey go
+    where
+        go :: (Int,Int) -> (Char,Dir) -> Grid -> Grid
+        go coords markdir grid' = stampGrid grid' coords markdir
+
+        stampGrid :: Grid -> (Int,Int) -> (Char,Dir) -> Grid
+        stampGrid g@Grid{..} (row,col) (c,dir) = do
+            let offset = index g (Pos row col dir)
+            let gridData' = take offset gridData ++ [c] ++ drop (offset+1) gridData
+            Grid gridData' gridWidth gridHeight gridInitial gridCurrent gridVisited
+
 
