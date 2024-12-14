@@ -2,7 +2,6 @@
 
 module Main where
 
-import Control.Monad (replicateM)
 import qualified Data.List as L
 import qualified Data.Map as M
 
@@ -22,8 +21,6 @@ data Pos = Pos Int Int
 data SignalPair = SignalPair Pos Pos Char
     deriving (Show)
 
---data Effect = Effect SignalSrc [AntiNode]
-
 
 main :: IO ()
 main = do
@@ -34,6 +31,9 @@ main = do
     printGrid grid
     putStrLn ""
     part1 grid pairs
+
+    putStrLn ""
+    part2 grid pairs
 
     --testAntiNodes
 
@@ -51,6 +51,19 @@ part1 grid allPairs = do
         signalAntinodes :: [SignalPair] -> [Pos]
         signalAntinodes pairs = L.nub $ concatMap (antiNodes grid) pairs
 
+part2 :: Grid -> [[SignalPair]] -> IO ()
+part2 grid allPairs = do
+    let allHarmonics = fmap signalHarmonics allPairs
+    let uniqueHarmonics = L.nub (concat allHarmonics)
+    printGridWithAnti grid uniqueHarmonics
+
+    let Grid{..} = updateGridWithAntis grid uniqueHarmonics
+    let active = filter (/= '.') gridData
+    putStrLn $ "Part2: " <> show (length active)
+    where
+        signalHarmonics :: [SignalPair] -> [Pos]
+        signalHarmonics pairs = L.nub $ concatMap (harmonics grid) pairs
+
 
 updateGrid :: Grid -> (Char, Pos) -> Grid
 updateGrid grid@Grid{..} (c, Pos row col) = do
@@ -63,10 +76,14 @@ updateGrid grid@Grid{..} (c, Pos row col) = do
         let newData = L.take offset gridData ++ [newChar] ++ L.drop (offset+1) gridData
         Grid newData gridWidth gridHeight
 
+updateGridWithAntis :: Grid -> [Pos] -> Grid
+updateGridWithAntis grid antis = do
+    let chars = replicate (length antis) '#'
+    foldl updateGrid grid (zip chars antis)
+
 printGridWithAnti :: Grid -> [Pos] -> IO ()
 printGridWithAnti grid antis = do
-    let chars = replicate (length antis) '#'
-    let newGrid = foldl updateGrid grid (zip chars antis)
+    let newGrid = updateGridWithAntis grid antis
     printGrid newGrid
 
 printGrid :: Grid -> IO ()
@@ -152,3 +169,22 @@ antiNodes grid s@(SignalPair (Pos r0 c0) (Pos r1 c1) _) = do
         (False, True) -> [a1]
         (False, False) -> []
 
+-- Given a singal pair, calculate all harmonics to the edge of the grid in either direction
+harmonics :: Grid -> SignalPair -> [Pos]
+harmonics grid s@(SignalPair p0 p1 _) = do
+    let delta@(dr,dc) = distance s
+    let delta' = (-dr,-dc)
+    let hpos = go [] delta p1
+    let hneg = go [] delta' p0
+    hpos ++ hneg
+    where
+        go :: [Pos] -> (Int,Int) -> Pos -> [Pos]
+        go hx delta pos =
+            case nextHarmonic delta pos of
+                Nothing -> hx
+                Just h -> go (h:hx) delta h
+        nextHarmonic :: (Int,Int) -> Pos -> Maybe Pos
+        nextHarmonic (dr,dc) (Pos r c) =
+            let h = Pos (r+dr) (c+dc)
+            in
+                if isValidPos grid h then Just h else Nothing
